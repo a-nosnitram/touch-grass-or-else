@@ -1,54 +1,86 @@
 import mediapipe as mp
 import cv2
+import vision.contact_logic as contact_logic
 
 # Initialize Mediapipe drawing utilities and holistic model components
 mp_drawing = mp.solutions.drawing_utils
 mp_holistic = mp.solutions.holistic
 
-# Start capturing video from the webcam
+# Start capturing video from the webcams
 cap = cv2.VideoCapture(0)
 
-# next we process the video feed frame by frame
-with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
-    while cap.isOpened():
-        ret, frame = cap.read()
 
-        if not ret:
-            break
+def body_tracker(frame, grass_mask, holistic):
+    height, width, _ = frame.shape
 
-        # Convert the BGR image to RGB before processing
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # BGR image to RGB before processing
+    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # process the image and get the holistic results
-        results = holistic.process(image)
+    # process the image and get the holistic results
+    results = holistic.process(image)
 
-        # convert back to BGR for OpenCV
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # convert back to BGR for OpenCV
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        # draw the landmarks
-        # face
-        mp_drawing.draw_landmarks(image, results.face_landmarks, mp_holistic.FACEMESH_CONTOURS, mp_drawing.DrawingSpec(color=(
-            80, 110, 10), thickness=1, circle_radius=1), mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
+    contact_status = contact_logic.check_grass_contact(
+        results.pose_landmarks, grass_mask, height, width)
 
-        # right hand
-        mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, mp_drawing.DrawingSpec(color=(
-            80, 110, 10), thickness=1, circle_radius=1), mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
+    # draw the landmarks
+    if results.pose_landmarks:
+        mp_drawing.draw_landmarks(
+            image,
+            results.pose_landmarks,
+            mp_holistic.POSE_CONNECTIONS,
+            mp_drawing.DrawingSpec(color=(245, 117, 66),
+                                   thickness=2, circle_radius=4),
+            mp_drawing.DrawingSpec(color=(245, 66, 230),
+                                   thickness=2, circle_radius=2)
+        )
 
-        # left hand
-        mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, mp_drawing.DrawingSpec(color=(
-            80, 110, 10), thickness=1, circle_radius=1), mp_drawing.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1))
+        # highlight landmarks that are in contact with grass
+        for part, in_contact in contact_status.items():
+            if in_contact:
+                if 'foot' in part:
+                    landmark_idx = mp_holistic.PoseLandmark.LEFT_FOOT_INDEX if 'left' in part else mp_holistic.PoseLandmark.RIGHT_FOOT_INDEX
+                elif 'hand' in part:
+                    landmark_idx = mp_holistic.PoseLandmark.LEFT_INDEX if 'left' in part else mp_holistic.PoseLandmark.RIGHT_INDEX
+                elif 'knee' in part:
+                    landmark_idx = mp_holistic.PoseLandmark.LEFT_KNEE if 'left' in part else mp_holistic.PoseLandmark.RIGHT_KNEE
 
-        # pose
-        mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, mp_drawing.DrawingSpec(color=(
-            245, 117, 66), thickness=2, circle_radius=4), mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2))
+                lmrk = results.pose_landmarks.landmark[landmark_idx]
+                x = int(lmrk.x * width)
+                y = int(lmrk.y * height)
 
-        # display processed frame
-        cv2.imshow('full body detection', image)
+                # circle for contact
+                cv2.circle(image, (x, y), 15, (0, 255, 0), -1)
 
-        # temporary quit key
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
+        mp_drawing.draw_landmarks(
+            image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+        mp_drawing.draw_landmarks(
+            image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
 
-# release resources
-cap.release()
-cv2.destroyAllWindows()
+    return image, contact_status
+
+
+if __name__ == "__main__":
+    # next we process the video feed frame by frame
+    with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+        while cap.isOpened():
+            ret, frame = cap.read()
+
+            if not ret:
+                break
+
+            # process the frame to detect body landmarks
+            result, _ = body_tracker(frame, None, holistic)
+
+            # display processed frame
+            cv2.imshow('full body detection', result)
+
+            # temporary quit key
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                break
+
+    # release resources
+    cap.release()
+    cv2.destroyAllWindows()
