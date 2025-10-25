@@ -13,11 +13,10 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Import vision modules
 import vision.grass_detection as grass_detection
 import vision.body_tracker as body_tracker
 
-# Initialize MediaPipe
+# MediaPipe
 mp_holistic = mp.solutions.holistic
 
 class CameraWidget(QWidget):
@@ -46,7 +45,7 @@ class CameraWidget(QWidget):
 
         self.cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
 
-        # Initialize MediaPipe holistic model
+        # MediaPipe holistic model
         self.holistic = mp_holistic.Holistic(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
@@ -54,38 +53,19 @@ class CameraWidget(QWidget):
 
         # Track contact time for progress
         self.contact_frames = 0
-        self.required_contact_frames = 30
+        self.required_contact_frames = 10  # 10 frames = 0.33 seconds
+        self.last_contact = False  # Track contact state change
 
         # ctypes.windll is Windows-only, removed for macOS compatibility
         self.timer = QTimer()
-        self.progressBarTimer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-        self.progressBarTimer.timeout.connect(self.update_progress_bar)
-        self.timer.start(30)
-        self.progressBarTimer.start(100) # progress bar update interval
+        self.timer.start(30)  # 33fps for smooth video
 
     def reset(self):
         self.value = 0
         self.contact_frames = 0
+        self.last_contact = False
         self.timer.start()
-        self.progressBarTimer.start()
-
-    def update_progress_bar(self):
-        # progress only when touching grass
-        if self.contact_frames >= self.required_contact_frames:
-            self.value += 3  # progress only when touching grass
-
-
-        self.progressBar.setValue(self.value)
-
-        if self.value >= 100:
-            self.timer.stop()
-            self.progressBarTimer.stop()
-            self.hide()
-            self.releaseMouse()
-            self.main_window.show()
-            self.main_window.reset()
-
 
     def update_frame(self):
         ret, frame_orig = self.cap.read()
@@ -110,23 +90,53 @@ class CameraWidget(QWidget):
 
         # draw contact status text
         y_offset = 30
-        any_contact = False
+        contact_count = 0  # Count how many body parts are touching
         for part_name, in_contact in contact_status.items():
             if in_contact:
-                any_contact = True
+                contact_count += 1
             status_text = f"{part_name}: {'CONTACT' if in_contact else 'no contact'}"
             color = (0, 255, 0) if in_contact else (150, 150, 150)
             cv2.putText(final_frame, status_text, (10, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             y_offset += 25
 
-        # track contact duration
-        if any_contact:
+        # draw contact percentage
+        total_parts = max(len(contact_status), 1)
+        contacting_parts = sum(
+            1 for contact in contact_status.values() if contact)
+        contact_percentage = (contacting_parts / total_parts) * 100
+        percentage_text = f"Contact Percentage: {contact_percentage:.1f}%"
+        cv2.putText(final_frame, percentage_text, (10, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+
+        # Track contact duration
+        if contact_count > 0:
             self.contact_frames += 1
         else:
             self.contact_frames = 0
 
-        # convert to Qt format and display
+        # Update progress bar based on contact (smooth incremental progress)
+        if self.contact_frames >= self.required_contact_frames:
+            # Sustained contact - increment based on number of contact points
+            # Base speed: 2 points per frame
+            # Bonus: +1.5 per additional contact point
+            progress_increment = 2 + (contact_count - 1) * 1.5
+            self.value += progress_increment
+            self.progressBar.setValue(int(self.value))
+
+            if self.value >= 100:
+                self.timer.stop()
+                self.hide()
+                self.releaseMouse()
+                # Force exit fullscreen and return to normal window size
+                self.main_window.setWindowState(Qt.WindowNoState)
+                self.main_window.showNormal()
+                self.main_window.activateWindow()
+                self.main_window.raise_()
+                self.main_window.reset()
+
+        # Convert to Qt format and display
         frame_rgb = cv2.cvtColor(final_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
@@ -165,6 +175,10 @@ class MainWindow(QMainWindow):
     def reset(self):
         self.value = 100
         self.progress.setValue(self.value)
+        # Explicitly ensure window is not fullscreen
+        self.setWindowState(Qt.WindowNoState)
+        # Set fixed size from the UI file dimensions (526x156)
+        self.resize(526, 156)
         self.timer.start(100) # TIMER INTERVAL
 
     def update_progress(self):
