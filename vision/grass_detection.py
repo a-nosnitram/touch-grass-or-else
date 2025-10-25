@@ -11,8 +11,7 @@ cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
 
 
 def detect_grass(frame_orig):
-    # flip for selfie view
-    frame_orig = cv2.flip(frame_orig, 1)
+    # Note: frame is already flipped in main.py
 
     # green mask to detect grass
     # BGR to HSV for better color detection
@@ -57,31 +56,31 @@ def detect_grass(frame_orig):
     for contour in contours:
         if cv2.contourArea(contour) < min_contour_area:
             cv2.drawContours(result, [contour], -1, (0, 255, 255), -1)
-    return result
+    return result, grass_mask
 
 
-# Process the video feed frame by frame
-with mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confidence=0.5) as holistic:
-    while cap.isOpened():
-        ret, frame_orig = cap.read()
+if __name__ == "__main__":
+    # Process the video feed frame by frame
+    with mp_holistic.Holistic(min_detection_confidence=0.7, min_tracking_confidence=0.5) as holistic:
+        while cap.isOpened():
+            ret, frame_orig = cap.read()
 
-        if not ret:
-            print("Ignoring empty camera frame.")
-            break
+            if not ret:
+                print("Ignoring empty camera frame.")
+                break
 
-        # Detect grass in the frame
-        result = detect_grass(frame_orig)
+            # Detect grass in the frame
+            result, grass_mask = detect_grass(frame_orig)
 
-        # Show results
-        # cv2.imshow('Original', frame_orig)
-        # cv2.imshow('Grass Mask', grass_mask)
-        cv2.imshow('Grass Detection (AR Style)', result)
+            # Show results
+            # cv2.imshow('Original', frame_orig)
+            # cv2.imshow('Grass Mask', grass_mask)
+            cv2.imshow('Grass Detection (AR Style)', result)
 
-        # Quit on 'q' key
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
+            # Quit on 'q' key
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                break
 
-
-# Release resources
-cap.release()
-cv2.destroyAllWindows()
+    # Release resources
+    cap.release()
+    cv2.destroyAllWindows()
