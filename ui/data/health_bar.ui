@@ -6,50 +6,118 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>526</width>
-    <height>156</height>
+    <width>600</width>
+    <height>220</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">QMainWindow {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #2d5016, stop:1 #1a2e0d);
+}
+
+QLabel {
+    color: #e8f5e9;
+    font-family: 'Arial', sans-serif;
+}
+
+QProgressBar {
+    border: 2px solid #388e3c;
+    border-radius: 8px;
+    background-color: #1b5e20;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #66bb6a, stop:0.5 #43a047, stop:1 #2e7d32);
+    border-radius: 6px;
+}</string>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QProgressBar" name="progressBar">
     <property name="geometry">
      <rect>
-      <x>20</x>
-      <y>40</y>
-      <width>491</width>
-      <height>61</height>
+      <x>30</x>
+      <y>80</y>
+      <width>540</width>
+      <height>40</height>
      </rect>
     </property>
     <property name="value">
-     <number>24</number>
+     <number>100</number>
+    </property>
+    <property name="format">
+     <string>🌱 %p% GRASS HEALTH 🌱</string>
     </property>
    </widget>
-   <widget class="QLabel" name="label">
+   <widget class="QLabel" name="titleLabel">
     <property name="geometry">
      <rect>
-      <x>20</x>
-      <y>10</y>
-      <width>451</width>
-      <height>31</height>
+      <x>30</x>
+      <y>15</y>
+      <width>540</width>
+      <height>35</height>
      </rect>
     </property>
+    <property name="styleSheet">
+     <string notr="true">font-size: 22px; font-weight: bold; color: #a5d6a7;</string>
+    </property>
     <property name="text">
-     <string>GRASS HEALTH BAR:</string>
+     <string>🌿 TOUCH GRASS OR ELSE 🌿</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
     </property>
    </widget>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>526</width>
-     <height>21</height>
-    </rect>
-   </property>
+   <widget class="QLabel" name="instructionLabel">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>55</y>
+      <width>540</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">font-size: 11px; color: #c8e6c9; font-style: italic;</string>
+    </property>
+    <property name="text">
+     <string>You have exactly 5 minutes to lock in, before we will lock your laptop. You will have to touch grass to unlock it. No way around it, you troglodyte.</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="warningLabel">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>130</y>
+      <width>540</width>
+      <height>60</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true">font-size: 10px; color: #fff59d; padding: 10px; background-color: rgba(56, 142, 60, 0.3); border-radius: 5px;</string>
+    </property>
+    <property name="text">
+     <string>When your grass health reaches zero, you'll be forced to step outside
+(or at least touch some grass on camera).</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
+    </property>
+    <property name="wordWrap">
+     <bool>true</bool>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>

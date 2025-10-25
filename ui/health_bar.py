@@ -177,8 +177,8 @@ class MainWindow(QMainWindow):
         self.progress.setValue(self.value)
         # Explicitly ensure window is not fullscreen
         self.setWindowState(Qt.WindowNoState)
-        # Set fixed size from the UI file dimensions (526x156)
-        self.resize(526, 156)
+        # Set fixed size from the updated UI file dimensions (600x220)
+        self.resize(600, 220)
         self.timer.start(100) # TIMER INTERVAL
 
     def update_progress(self):
