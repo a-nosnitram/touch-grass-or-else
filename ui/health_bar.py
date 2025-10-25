@@ -1,12 +1,24 @@
 import sys
+import os
 
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon, QImage, QPixmap
 from PyQt5 import uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QProgressBar, QLabel, QWidget
 import cv2
-from pynput.mouse import Button, Controller
-import ctypes
+import mediapipe as mp
+
+# Add parent directory to path to import vision modules
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Import vision modules
+import vision.grass_detection as grass_detection
+import vision.body_tracker as body_tracker
+
+# Initialize MediaPipe
+mp_holistic = mp.solutions.holistic
 
 class CameraWidget(QWidget):
     def __init__(self, main_window):
@@ -32,47 +44,103 @@ class CameraWidget(QWidget):
         self.progressBar.setValue(self.value)
         self.progressBar.setGeometry(50, screen_height - 100, screen_width - 100, 30)
 
+        self.cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
 
-        self.cap = cv2.VideoCapture(0)
+        # Initialize MediaPipe holistic model
+        self.holistic = mp_holistic.Holistic(
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
 
-        ctypes.windll.user32.BlockInput(True)
+        # Track contact time for progress
+        self.contact_frames = 0
+        self.required_contact_frames = 30  # ~1 second at 30fps
+
+        # ctypes.windll is Windows-only, removed for macOS compatibility
         self.timer = QTimer()
         self.progressBarTimer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.progressBarTimer.timeout.connect(self.update_progress_bar)
         self.timer.start(30)
-        self.progressBarTimer.start(100)
+        self.progressBarTimer.start(100) # progress bar update interval
 
     def reset(self):
         self.value = 0
+        self.contact_frames = 0
         self.timer.start()
         self.progressBarTimer.start()
 
     def update_progress_bar(self):
-        self.value += 1
+        # progress only when touching grass
+        if self.contact_frames >= self.required_contact_frames:
+            self.value += 3  # progress only when touching grass
+
+
         self.progressBar.setValue(self.value)
 
         if self.value >= 100:
             self.timer.stop()
             self.progressBarTimer.stop()
             self.hide()
-            ctypes.windll.user32.BlockInput(False)
             self.releaseMouse()
             self.main_window.show()
             self.main_window.reset()
 
 
     def update_frame(self):
-        ret, frame = self.cap.read()
-        if ret:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame.shape
-            bytes_per_line = ch * w
-            qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        ret, frame_orig = self.cap.read()
+        if not ret:
+            return
 
-            pixmap = QPixmap.fromImage(qt_image)
-            pixmap = pixmap.scaled(self.width(), self.height(), Qt.KeepAspectRatioByExpanding)
-            self.video_label.setPixmap(pixmap)
+        # flip mirror
+        frame = cv2.flip(frame_orig, 1)
+
+        # detect grass
+        _, grass_mask = grass_detection.detect_grass(frame)
+
+        # track body and detect contact
+        body_result, contact_status = body_tracker.body_tracker(
+            frame, grass_mask, self.holistic
+        )
+
+        # blend grass overlay
+        overlay = body_result.copy()
+        overlay[grass_mask > 0] = [0, 255, 0]
+        final_frame = cv2.addWeighted(body_result, 0.85, overlay, 0.15, 0)
+
+        # draw contact status text
+        y_offset = 30
+        any_contact = False
+        for part_name, in_contact in contact_status.items():
+            if in_contact:
+                any_contact = True
+            status_text = f"{part_name}: {'CONTACT' if in_contact else 'no contact'}"
+            color = (0, 255, 0) if in_contact else (150, 150, 150)
+            cv2.putText(final_frame, status_text, (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            y_offset += 25
+
+        # track contact duration
+        if any_contact:
+            self.contact_frames += 1
+        else:
+            self.contact_frames = 0
+
+        # convert to Qt format and display
+        frame_rgb = cv2.cvtColor(final_frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame_rgb.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+        pixmap = QPixmap.fromImage(qt_image)
+        pixmap = pixmap.scaled(self.width(), self.height(), Qt.KeepAspectRatioByExpanding)
+        self.video_label.setPixmap(pixmap)
+
+    def closeEvent(self, event):
+        # clean up MediaPipe when closing
+        self.holistic.close()
+        self.cap.release()
+        super().closeEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -90,14 +158,14 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_progress)
         self.value = 100
-        self.timer.start(100)
+        self.timer.start(100) # TIMER INTERVAL
 
         self.camera_widget = CameraWidget(self)
 
     def reset(self):
         self.value = 100
         self.progress.setValue(self.value)
-        self.timer.start(100)
+        self.timer.start(100) # TIMER INTERVAL
 
     def update_progress(self):
         self.value -= 1
