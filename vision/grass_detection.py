@@ -44,7 +44,7 @@ def detect_grass(frame_orig):
     overlay[grass_mask > 0] = [0, 255, 0]  # Paint detected grass green
 
     # blend original frame with overlay (30% overlay, 70% original)
-    result = cv2.addWeighted(frame_orig, 0.7, overlay, 0.3, 0)
+    result = cv2.addWeighted(frame_orig, 0.55, overlay, 0.3, 0)
 
     # draw contours around detected grass regions (plane detection style)
     contours, _ = cv2.findContours(

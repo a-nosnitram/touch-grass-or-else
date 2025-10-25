@@ -4,7 +4,7 @@ import mediapipe as mp
 import cv2
 
 
-# Initialize Mediapipe drawing utilities and holistic model components
+# Mediapipe drawing utilities and holistic model components
 mp_drawing = mp.solutions.drawing_utils
 mp_holistic = mp.solutions.holistic
 
@@ -33,17 +33,26 @@ with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=
         # Create grass overlay
         overlay = body_result.copy()
         overlay[grass_mask > 0] = [0, 255, 0]
-        
-        # Blend: 85% body result, 15% grass overlay (more transparent grass so body shows through)
-        final_result = cv2.addWeighted(body_result, 0.85, overlay, 0.15, 0)
+
+        # Blend: 70% body result, 30% grass overlay
+        final_result = cv2.addWeighted(body_result, 0.7, overlay, 0.3, 0)
 
         y_offset = 30
         for part, in_contact in contact_status.items():
             status_text = f"{part}: {'Contact' if in_contact else 'No Contact'}"
             color = (0, 255, 0) if in_contact else (100, 100, 100)
             cv2.putText(final_result, status_text, (10, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
             y_offset += 25
+
+        # draw contact percentage
+        total_parts = max(len(contact_status), 1)
+        contacting_parts = sum(
+            1 for contact in contact_status.values() if contact)
+        contact_percentage = (contacting_parts / total_parts) * 100
+        percentage_text = f"Contact Percentage: {contact_percentage:.1f}%"
+        cv2.putText(final_result, percentage_text, (10, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         # display processed frame
         cv2.imshow('full body detection', final_result)

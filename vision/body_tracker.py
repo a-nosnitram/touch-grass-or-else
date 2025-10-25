@@ -13,7 +13,7 @@ cap = cv2.VideoCapture(0)
 def body_tracker(frame, grass_mask, holistic):
     height, width, _ = frame.shape
 
-    # Convert the BGR image to RGB before processing
+    # BGR image to RGB before processing
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     # process the image and get the holistic results

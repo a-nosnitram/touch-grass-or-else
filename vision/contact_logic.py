@@ -48,7 +48,7 @@ def check_grass_contact(pose_landmarks, grass_mask, frame_height, frame_width):
         # check that coordinates are within the frame
         if 0 <= x < frame_width and 0 <= y < frame_height:
             # check if pixel is on grass
-            radius = 10
+            radius = 30
             x_min = max(0, x - radius)
             x_max = min(frame_width, x + radius)
             y_min = max(0, y - radius)
