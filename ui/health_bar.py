@@ -54,7 +54,7 @@ class CameraWidget(QWidget):
 
         # Track contact time for progress
         self.contact_frames = 0
-        self.required_contact_frames = 30  # ~1 second at 30fps
+        self.required_contact_frames = 30
 
         # ctypes.windll is Windows-only, removed for macOS compatibility
         self.timer = QTimer()
