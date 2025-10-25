@@ -1,0 +1,11 @@
+[project]
+name = "touch-grass-or-else"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mediapipe>=0.10.21",
+    "numpy>=1.26.4",
+    "pyqt5>=5.15.11",
+]
