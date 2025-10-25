@@ -56,6 +56,40 @@ class CameraWidget(QWidget):
         self.required_contact_frames = 10  # 10 frames = 0.33 seconds
         self.last_contact = False  # Track contact state change
 
+        # Load cursed meme images
+        self.meme_images = []
+        meme_paths = ['assets/grass-meme1.jpg', 'assets/grass-meme2.jpg',
+                      'assets/grass-meme3.jpg', 'assets/leaf.jpg',
+                      'assets/warning-text.jpg']
+        for path in meme_paths:
+            img = cv2.imread(path)
+            if img is not None:
+                # Resize to reasonable size (300x300)
+                img = cv2.resize(img, (300, 300))
+                self.meme_images.append(img)
+            else:
+                print(f"Warning: Could not load {path}")
+
+        print(f"Loaded {len(self.meme_images)} meme images")
+
+        # Animation state for cursed effects
+        self.frame_count = 0
+        self.meme_positions = []
+        self.meme_rotations = []
+        self.meme_scales = []
+        self.meme_opacities = []
+
+        # Initialize random properties for each meme
+        import random
+        for i in range(len(self.meme_images)):
+            self.meme_positions.append([
+                random.randint(100, screen_width - 400),
+                random.randint(100, screen_height - 400)
+            ])
+            self.meme_rotations.append(random.uniform(0, 360))
+            self.meme_scales.append(random.uniform(0.5, 1.5))
+            self.meme_opacities.append(1.0)
+
         # ctypes.windll is Windows-only, removed for macOS compatibility
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
@@ -65,6 +99,20 @@ class CameraWidget(QWidget):
         self.value = 0
         self.contact_frames = 0
         self.last_contact = False
+        self.frame_count = 0
+        # Reset meme animations
+        import random
+        screen_geometry = QApplication.primaryScreen().geometry()
+        screen_width = screen_geometry.width()
+        screen_height = screen_geometry.height()
+        for i in range(len(self.meme_images)):
+            self.meme_positions[i] = [
+                random.randint(100, screen_width - 400),
+                random.randint(100, screen_height - 400)
+            ]
+            self.meme_rotations[i] = random.uniform(0, 360)
+            self.meme_scales[i] = random.uniform(0.5, 1.5)
+            self.meme_opacities[i] = 1.0
         self.timer.start()
 
     def update_frame(self):
@@ -88,26 +136,88 @@ class CameraWidget(QWidget):
         overlay[grass_mask > 0] = [0, 255, 0]
         final_frame = cv2.addWeighted(body_result, 0.85, overlay, 0.15, 0)
 
-        # draw contact status text
-        y_offset = 30
+        # Add cursed animated memes if progress bar is below 5%
+        import random
+        import math
+        if self.value < 5:
+            self.frame_count += 1
+            for i, meme_img in enumerate(self.meme_images):
+                # Cursed movement patterns
+                time = self.frame_count * 0.05
+
+                # Aggressive spinning
+                self.meme_rotations[i] += random.uniform(-15, 15)
+
+                # Super chaotic movement - blast around the screen!
+                self.meme_positions[i][0] += math.sin(time + i) * random.uniform(10, 30)
+                self.meme_positions[i][1] += math.cos(time * 1.3 + i) * random.uniform(10, 30)
+
+                # Random teleportation occasionally
+                if random.random() < 0.02:
+                    h, w = final_frame.shape[:2]
+                    self.meme_positions[i][0] = random.randint(0, max(1, w - 300))
+                    self.meme_positions[i][1] = random.randint(0, max(1, h - 300))
+
+                # Keep in bounds (with wraparound)
+                h, w = final_frame.shape[:2]
+                self.meme_positions[i][0] = self.meme_positions[i][0] % max(1, w - 300)
+                self.meme_positions[i][1] = self.meme_positions[i][1] % max(1, h - 300)
+
+                # Pulsing scale - more extreme
+                self.meme_scales[i] = 0.5 + 0.8 * abs(math.sin(time * 3 + i))
+
+                # Aggressive blinking
+                if random.random() < 0.1:  # More frequent blinks
+                    self.meme_opacities[i] = random.uniform(0.2, 1.0)
+                else:
+                    self.meme_opacities[i] = min(1.0, self.meme_opacities[i] + 0.1)
+
+                # Apply transformations
+                M = cv2.getRotationMatrix2D((150, 150), self.meme_rotations[i], self.meme_scales[i])
+                rotated_meme = cv2.warpAffine(meme_img, M, (300, 300))
+
+                # Overlay with opacity
+                x, y = int(self.meme_positions[i][0]), int(self.meme_positions[i][1])
+                alpha = self.meme_opacities[i] * 0.8  # Slightly transparent to see through
+
+                # Blend meme onto frame
+                try:
+                    y_end = min(y + 300, final_frame.shape[0])
+                    x_end = min(x + 300, final_frame.shape[1])
+                    meme_h = y_end - y
+                    meme_w = x_end - x
+
+                    if meme_h > 0 and meme_w > 0:
+                        roi = final_frame[y:y_end, x:x_end]
+                        meme_crop = rotated_meme[:meme_h, :meme_w]
+                        if roi.shape == meme_crop.shape:
+                            blended = cv2.addWeighted(roi, 1-alpha, meme_crop, alpha, 0)
+                            final_frame[y:y_end, x:x_end] = blended
+                except Exception as e:
+                    pass  # Skip if out of bounds
+
+        # draw contact status text (positioned on the right side, lower on screen)
+        # Start at x=1200 (right side) and y=700
+        x_offset = 1200
+        y_offset = 700
         contact_count = 0  # Count how many body parts are touching
         for part_name, in_contact in contact_status.items():
             if in_contact:
                 contact_count += 1
             status_text = f"{part_name}: {'CONTACT' if in_contact else 'no contact'}"
             color = (0, 255, 0) if in_contact else (150, 150, 150)
-            cv2.putText(final_frame, status_text, (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            y_offset += 25
+            cv2.putText(final_frame, status_text, (x_offset, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            y_offset += 30
 
         # draw contact percentage
         total_parts = max(len(contact_status), 1)
         contacting_parts = sum(
             1 for contact in contact_status.values() if contact)
         contact_percentage = (contacting_parts / total_parts) * 100
-        percentage_text = f"Contact Percentage: {contact_percentage:.1f}%"
-        cv2.putText(final_frame, percentage_text, (10, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        percentage_text = f"Contact: {contact_percentage:.0f}%"
+        cv2.putText(final_frame, percentage_text, (x_offset, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
 
 
         # Track contact duration
