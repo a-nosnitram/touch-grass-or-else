@@ -89,7 +89,7 @@ QProgressBar::chunk {
      <string notr="true">font-size: 11px; color: #c8e6c9; font-style: italic;</string>
     </property>
     <property name="text">
-     <string>You have exactly 5 minutes to lock in, before we will lock your laptop. You will have to touch grass to unlock it. No way around it, you troglodyte.</string>
+     <string>You have exactly 5 minutes to lock in, before we will lock your laptop. </string>
     </property>
     <property name="alignment">
      <set>Qt::AlignCenter</set>

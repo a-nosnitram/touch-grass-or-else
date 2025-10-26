@@ -4,11 +4,11 @@ import os
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon, QImage, QPixmap
 from PyQt5 import uic
-from PyQt5.QtWidgets import QApplication, QMainWindow, QProgressBar, QLabel, QWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QProgressBar, QLabel, QWidget, QGraphicsBlurEffect
 import cv2
+import numpy as np
 import mediapipe as mp
 
-# Add parent directory to path to import vision modules
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
@@ -136,71 +136,101 @@ class CameraWidget(QWidget):
         overlay[grass_mask > 0] = [0, 255, 0]
         final_frame = cv2.addWeighted(body_result, 0.85, overlay, 0.15, 0)
 
-        # Add cursed animated memes if progress bar is below 5%
+        # cursed animated memes if progress bar is below 5%
         import random
         import math
         if self.value < 5:
             self.frame_count += 1
             for i, meme_img in enumerate(self.meme_images):
-                # Cursed movement patterns
+                # cursed movement patterns
                 time = self.frame_count * 0.05
 
-                # Aggressive spinning
+                # aggressive spinning
                 self.meme_rotations[i] += random.uniform(-15, 15)
 
-                # Super chaotic movement - blast around the screen!
+                # chaotic movement - blast around the screen!
                 self.meme_positions[i][0] += math.sin(time + i) * random.uniform(10, 30)
                 self.meme_positions[i][1] += math.cos(time * 1.3 + i) * random.uniform(10, 30)
 
-                # Random teleportation occasionally
+                # random teleportation occasionally
                 if random.random() < 0.02:
                     h, w = final_frame.shape[:2]
                     self.meme_positions[i][0] = random.randint(0, max(1, w - 300))
                     self.meme_positions[i][1] = random.randint(0, max(1, h - 300))
 
-                # Keep in bounds (with wraparound)
+                # keep in bounds (with wraparound)
                 h, w = final_frame.shape[:2]
                 self.meme_positions[i][0] = self.meme_positions[i][0] % max(1, w - 300)
                 self.meme_positions[i][1] = self.meme_positions[i][1] % max(1, h - 300)
 
-                # Pulsing scale - more extreme
+                # pulsing scale - more extreme
                 self.meme_scales[i] = 0.5 + 0.8 * abs(math.sin(time * 3 + i))
 
-                # Aggressive blinking
+                # aggressive blinking
                 if random.random() < 0.1:  # More frequent blinks
                     self.meme_opacities[i] = random.uniform(0.2, 1.0)
                 else:
                     self.meme_opacities[i] = min(1.0, self.meme_opacities[i] + 0.1)
 
-                # Apply transformations
-                M = cv2.getRotationMatrix2D((150, 150), self.meme_rotations[i], self.meme_scales[i])
-                rotated_meme = cv2.warpAffine(meme_img, M, (300, 300))
+                # create a larger canvas that can fit the rotated image
+                canvas_size = 450  # Larger than 300 to accommodate rotation
+                canvas = np.zeros((canvas_size, canvas_size, 3), dtype=np.uint8)
 
-                # Overlay with opacity
+                # get the region from video frame to use as background
                 x, y = int(self.meme_positions[i][0]), int(self.meme_positions[i][1])
-                alpha = self.meme_opacities[i] * 0.8  # Slightly transparent to see through
+                x = max(0, min(final_frame.shape[1] - canvas_size, x))
+                y = max(0, min(final_frame.shape[0] - canvas_size, y))
 
-                # Blend meme onto frame
+                # extract background from video frame
+                bg_roi = final_frame[y:y+canvas_size, x:x+canvas_size].copy()
+                if bg_roi.shape[:2] == (canvas_size, canvas_size):
+                    canvas = bg_roi
+
+                # place meme image in center of canvas
+                offset = (canvas_size - 300) // 2
+                canvas[offset:offset+300, offset:offset+300] = meme_img
+
+                # rotate the canvas
+                M = cv2.getRotationMatrix2D((canvas_size/2, canvas_size/2), self.meme_rotations[i], self.meme_scales[i])
+                rotated_canvas = cv2.warpAffine(canvas, M, (canvas_size, canvas_size))
+
+                # create mask for non-background pixels (detect the meme vs background)
+                # convert to grayscale and threshold to find the meme
+                gray_meme = cv2.cvtColor(meme_img, cv2.COLOR_BGR2GRAY)
+                _, mask_original = cv2.threshold(gray_meme, 10, 255, cv2.THRESH_BINARY)
+
+                # place mask in center and rotate it
+                mask_canvas = np.zeros((canvas_size, canvas_size), dtype=np.uint8)
+                mask_canvas[offset:offset+300, offset:offset+300] = mask_original
+                rotated_mask = cv2.warpAffine(mask_canvas, M, (canvas_size, canvas_size))
+
+                # overlay with opacity using mask
+                alpha = self.meme_opacities[i] * 0.8
+
+                # blend rotated meme onto frame using the mask
                 try:
-                    y_end = min(y + 300, final_frame.shape[0])
-                    x_end = min(x + 300, final_frame.shape[1])
-                    meme_h = y_end - y
-                    meme_w = x_end - x
+                    y_end = min(y + canvas_size, final_frame.shape[0])
+                    x_end = min(x + canvas_size, final_frame.shape[1])
+                    canvas_h = y_end - y
+                    canvas_w = x_end - x
 
-                    if meme_h > 0 and meme_w > 0:
+                    if canvas_h > 0 and canvas_w > 0:
                         roi = final_frame[y:y_end, x:x_end]
-                        meme_crop = rotated_meme[:meme_h, :meme_w]
-                        if roi.shape == meme_crop.shape:
-                            blended = cv2.addWeighted(roi, 1-alpha, meme_crop, alpha, 0)
-                            final_frame[y:y_end, x:x_end] = blended
+                        canvas_crop = rotated_canvas[:canvas_h, :canvas_w]
+                        mask_crop = rotated_mask[:canvas_h, :canvas_w]
+
+                        if roi.shape == canvas_crop.shape:
+                            # Only blend where mask is active
+                            mask_3ch = cv2.cvtColor(mask_crop, cv2.COLOR_GRAY2BGR) / 255.0
+                            blended = roi * (1 - mask_3ch * alpha) + canvas_crop * (mask_3ch * alpha)
+                            final_frame[y:y_end, x:x_end] = blended.astype(np.uint8)
                 except Exception as e:
-                    pass  # Skip if out of bounds
+                    pass
 
         # draw contact status text (positioned on the right side, lower on screen)
-        # Start at x=1200 (right side) and y=700
         x_offset = 1200
         y_offset = 700
-        contact_count = 0  # Count how many body parts are touching
+        contact_count = 0
         for part_name, in_contact in contact_status.items():
             if in_contact:
                 contact_count += 1
@@ -220,18 +250,15 @@ class CameraWidget(QWidget):
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
 
 
-        # Track contact duration
+        # track contact duration
         if contact_count > 0:
             self.contact_frames += 1
         else:
             self.contact_frames = 0
 
-        # Update progress bar based on contact (smooth incremental progress)
+        # update progress bar based on contact (smooth incremental progress)
         if self.contact_frames >= self.required_contact_frames:
-            # Sustained contact - increment based on number of contact points
-            # Base speed: 2 points per frame
-            # Bonus: +1.5 per additional contact point
-            progress_increment = 2 + (contact_count - 1) * 1.5
+            progress_increment = 0.3 + (contact_count - 1) * 1.1
             self.value += progress_increment
             self.progressBar.setValue(int(self.value))
 
@@ -239,14 +266,13 @@ class CameraWidget(QWidget):
                 self.timer.stop()
                 self.hide()
                 self.releaseMouse()
-                # Force exit fullscreen and return to normal window size
                 self.main_window.setWindowState(Qt.WindowNoState)
                 self.main_window.showNormal()
                 self.main_window.activateWindow()
                 self.main_window.raise_()
                 self.main_window.reset()
 
-        # Convert to Qt format and display
+        # convert to Qt format and display
         frame_rgb = cv2.cvtColor(final_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
@@ -270,26 +296,43 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Touch Grass")
         self.setWindowIcon(QIcon("data/grass.png"))
 
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+
+        # window opacity for slight transparency
+        self.setWindowOpacity(0.95)
+
         self.progress = self.findChild(QProgressBar, "progressBar")
         self.progress.setMinimum(0)
         self.progress.setMaximum(100)
         self.progress.setValue(100)
 
+        # custom borders - top and sides only, no bottom
+        self.centralWidget().setStyleSheet("""
+            QWidget#centralwidget {
+                background-color: rgba(25, 35, 25, 220);
+                border-top: 2px solid rgba(100, 150, 100, 150);
+                border-left: 2px solid rgba(100, 150, 100, 150);
+                border-right: 2px solid rgba(100, 150, 100, 150);
+                border-bottom: none;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+            }
+        """)
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_progress)
         self.value = 100
-        self.timer.start(100) # TIMER INTERVAL
+        self.timer.start(200) # TIMER INTERVAL
 
         self.camera_widget = CameraWidget(self)
 
     def reset(self):
         self.value = 100
         self.progress.setValue(self.value)
-        # Explicitly ensure window is not fullscreen
         self.setWindowState(Qt.WindowNoState)
-        # Set fixed size from the updated UI file dimensions (600x220)
         self.resize(600, 220)
-        self.timer.start(100) # TIMER INTERVAL
+        self.timer.start(200) # TIMER INTERVAL
 
     def update_progress(self):
         self.value -= 1

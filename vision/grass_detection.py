@@ -19,7 +19,7 @@ def detect_grass(frame_orig):
 
     # only consider lower part of the frame for grass detection
     height, width, _ = hsv_frame.shape
-    hsv_frame[0:int(height*0.7), :] = 0
+    hsv_frame[0:int(height*0.4), :] = 0
 
     lower_green = np.array([35, 40, 40])
     upper_green = np.array([85, 255, 255])
